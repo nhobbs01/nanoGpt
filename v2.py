@@ -13,6 +13,7 @@ eval_iters = 200
 n_embed = 32
 n_head = 4
 n_layer = 4
+dropout = 0.2
 # -----------------
 
 torch.manual_seed(1337)
@@ -73,6 +74,7 @@ class Head(nn.Module):
         self.query = nn.Linear(n_embed, head_size, bias=False)
         self.value = nn.Linear(n_embed, head_size, bias=False)
         self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
+        self.drop = nn.Dropout(dropout)
 
     def forward(self, x):
         B, T, C = x.shape
@@ -83,22 +85,23 @@ class Head(nn.Module):
         wei *= C**-0.5 # Scale attention
         wei = wei.masked_fill(self.tril[:T,:T] ==0, float('-inf')) # Doesn't communitcate with the past
         wei = F.softmax(wei, dim=-1)
-
+        wei = self.drop(wei)
         v = self.value(x)
         out = wei @ v
         return out
     
-class MultiHead(nn.Module):
+class MultiHeadAttention(nn.Module):
 
     def __init__(self, n_head, head_size):
         super().__init__()
         self.heads =nn.ModuleList([Head(head_size) for i in range(n_head)])
         self.proj = nn.Linear(n_embed, n_embed)
+        self.drop = nn.Dropout(dropout)
 
     def forward(self, x):
         outs = [head(x) for head in self.heads]
         out = torch.cat(outs, -1)
-        out = self.proj(out)
+        out = self.drop(self.proj(out))
         return out
 
 class FeedForward(nn.Module):
@@ -109,6 +112,7 @@ class FeedForward(nn.Module):
             nn.Linear(n_embed, 4*n_embed),
             nn.ReLU(),
             nn.Linear(4*n_embed, n_embed),
+            nn.Dropout(dropout)
         )
     def forward(self, x):
         return self.net(x)
@@ -117,7 +121,7 @@ class Block(nn.Module):
     def __init__(self, n_embed, n_head):
         super().__init__()
         head_size = n_embed // n_head
-        self.sa = MultiHead(n_head, head_size)
+        self.sa = MultiHeadAttention(n_head, head_size)
         self.ln1 = nn.LayerNorm(n_embed) # Normalize the last dim (C) which is n_embed
         self.ffwd = FeedForward(n_embed)
         self.ln2 = nn.LayerNorm(n_embed)
