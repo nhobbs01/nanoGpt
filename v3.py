@@ -71,6 +71,7 @@ class Head(nn.Module):
 
     def __init__(self, head_size):
         super().__init__()
+        self.head_size = head_size
         self.key = nn.Linear(n_embed, head_size, bias=False)
         self.query = nn.Linear(n_embed, head_size, bias=False)
         self.value = nn.Linear(n_embed, head_size, bias=False)
@@ -83,7 +84,7 @@ class Head(nn.Module):
         q = self.query(x) # B, T, head_size (B, T, 16)
 
         wei = q @ k.transpose(-2,-1) # (B, T, 16) @ (B, 16, T) => (B, T, T)
-        wei *= C**-0.5 # Scale attention
+        wei *= self.head_size**-0.5 # Scale attention
         wei = wei.masked_fill(self.tril[:T,:T] ==0, float('-inf')) # Doesn't communitcate with the past
         wei = F.softmax(wei, dim=-1)
         wei = self.drop(wei)
