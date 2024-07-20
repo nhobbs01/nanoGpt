@@ -18,7 +18,7 @@ torch.manual_seed(1337)
 
 #https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
 # read it in to inspect it
-with open('../input.txt', 'r', encoding='utf-8') as f:
+with open('./input.txt', 'r', encoding='utf-8') as f:
     text = f.read()
 
 chars = sorted(list(set(text)))

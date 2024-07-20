@@ -18,7 +18,7 @@ torch.manual_seed(1337)
 
 #https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
 # read it in to inspect it
-with open('../input.txt', 'r', encoding='utf-8') as f:
+with open('./input.txt', 'r', encoding='utf-8') as f:
     text = f.read()
 
 chars = sorted(list(set(text)))
@@ -98,6 +98,16 @@ class MultiHead(nn.Module):
         out = torch.cat(outs, -1)
         return out
 
+class FeedForward(nn.Module):
+
+    def __init__(self, n_embed):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(n_embed, n_embed),
+            nn.ReLU()
+        )
+    def forward(self, x):
+        return self.net(x)
 
 class TransformerModel(nn.Module):
     def __init__(self):
@@ -105,6 +115,7 @@ class TransformerModel(nn.Module):
         self.token_embedding_table = nn.Embedding(vocab_size, n_embed)
         self.position_embedding_table = nn.Embedding(block_size, n_embed)
         self.sa_heads = MultiHead(n_heads, n_embed//n_heads)
+        self.ffwd = FeedForward(n_embed)
         self.lm_head = nn.Linear(n_embed, vocab_size)
         
 
@@ -113,8 +124,9 @@ class TransformerModel(nn.Module):
 
         token_emb = self.token_embedding_table(idx)  # B, T, C  (C is n_embed)
         position_emb = self.position_embedding_table(torch.arange(T, device=device)) # T, C (create an embedding for each time step)
-        x = token_emb + position_emb
-        x = self.sa_heads(x)
+        x = token_emb + position_emb # (B, T, C)
+        x = self.sa_heads(x) # (B, T, C)
+        x = self.ffwd(x) # (B, T, C)
         logits = self.lm_head(x) # B, T, vocab_size
 
         if targets is None:
@@ -170,11 +182,9 @@ LOG:
 with one self-attention head
 - val loss about 2.4
 
-simple multi head attention - 8 heads
- - val loss 2.21
-
 simple multi head attention - 4 heads
  - val loss 2.27
 
-
+with feed forward layer after multi head attention 
+ - val loss 2.23
 """
