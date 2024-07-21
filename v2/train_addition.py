@@ -16,6 +16,8 @@ n_head = 4
 n_layer = 4
 # -----------------
 
+
+nn.Sequential()
 torch.manual_seed(1337)
 
 #https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
