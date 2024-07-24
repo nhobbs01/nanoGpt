@@ -1,31 +1,26 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-from model import TransformerModel
+from model_add import TransformerModel
+from datetime import datetime
 
 # hyperparameters
-batch_size = 32 # number of independent sequences processed in parallel
-block_size = 8 # context size
+batch_size = 64 # number of independent sequences processed in parallel
+block_size =  16 # context size
 max_iters = 5000
 eval_interval = 500
-learning_rate = 1e-2
+learning_rate = 1e-3
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 eval_iters = 200
-n_embed = 32
+
+n_embed = 64
 n_head = 4
 n_layer = 4
 # -----------------
 
-
-nn.Sequential()
 torch.manual_seed(1337)
 
-#https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
-# read it in to inspect it
-with open('./input.txt', 'r', encoding='utf-8') as f:
-    text = f.read()
-
-chars = sorted(list(set(text)))
+chars = ['0','1','2','3','4','5','6','7','8','9','$','+','='] # All the chars needed for addition
 vocab_size = len(chars)
 # tokenize chars
 stoi = {x:i for i,x in enumerate(chars)}
@@ -33,15 +28,24 @@ itos = {i:x for i,x in enumerate(chars)}
 encode = lambda s: [stoi[c] for c in s]
 decode = lambda xs: "".join([itos[x] for x in xs])
 
+# Different formats for the training data
 
-# Data splits
-data = torch.tensor(encode(text), dtype=torch.long)
-n=int(0.9*len(data))
-train_data=data[:n]
-val_data=data[n:]
+def getPlainFormat(data):
+    return"".join([f'{a}+{b}={str(c)}' for [a, b], c in zip(data.tolist(), data.sum(1).tolist())])
 
-def getBatch(split):
-    data = train_data if split == 'train' else val_data
+
+def getReverseFormat(data):
+    return"".join([f'${a}+{b}={str(c)[::-1]}$' for [a, b], c in zip(data.tolist(), data.sum(1).tolist())])
+
+#----------------------------------------
+
+# Generate batches on the fly
+def getRandomData(n=1000):
+    data = torch.cat([torch.randint(10, (int(n*0.2), 2)), torch.randint(100, (int(n*0.8), 2))])
+    return torch.tensor(encode(getReverseFormat(data)), dtype=torch.long)
+
+def getBatch():
+    data = getRandomData()
     ix = torch.randint(len(data)- block_size, (batch_size,)) ## len(data) - block_size so we don't index out of range
     x = torch.stack([data[i:block_size+i] for i in ix])
     y = torch.stack([data[i+1:block_size+i+1] for i in ix])
@@ -55,7 +59,7 @@ def estimate_loss():
     for split in ['train','val']:
         losses = torch.zeros(eval_iters)
         for k in range(eval_iters):
-            x, y = getBatch(split)
+            x, y = getBatch()
             _, loss = model(x, y)
             losses[k] = loss.item()
         out[split] = losses.mean() # Average the losses to make loss less noisy
@@ -65,7 +69,7 @@ def estimate_loss():
 def printSampleFromModel(context, max_tokens):
    print(decode(model.generate(idx=context, max_tokens=max_tokens)[0].tolist()))
 
-m = TransformerModel(vocab_size=vocab_size)
+m = TransformerModel(vocab_size=vocab_size, block_size=block_size, n_embed=n_embed, n_head=n_head, n_layer=n_layer)
 model = m.to(device)
 
 # Create a pytorch optimizer
@@ -77,7 +81,7 @@ for steps in range(max_iters):
         print(f'step {steps}, train loss: {losses["train"]:.4f}, val loss: {losses["val"]:.4f}')
     
     # sample data
-    xb, yb = getBatch('train')
+    xb, yb = getBatch()
 
     # Evaluate the loss
     logits, loss = model(xb, yb)
@@ -85,40 +89,21 @@ for steps in range(max_iters):
     loss.backward()
     optimizer.step()
 
-torch.save(model, 'model_v2.pth')
-context = torch.zeros((1,1), dtype=torch.long, device=device)
-printSampleFromModel(context, 500)
+now = datetime.today().strftime('%Y-%m-%d-%H-%M')
+torch.save(model, f'./models/model_add2_{now}.pth')
+print('./models/model_add2_{now}.pth')
+# context = torch.zeros((1,1), dtype=torch.long, device=device)
+context = torch.tensor(encode('2+5='), dtype=torch.long).view(1,-1)
+print(context)
+printSampleFromModel(context, 2)
 
 
 """
 LOG:
-all with these params
-batch_size = 32
-block_size = 8 # context size
-max_iters = 5000
-eval_interval = 500
-learning_rate = 1e-2
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-eval_iters = 200
-n_embed = 32
-n_head = 4
+with default representation e.g a+b=c (4+9=13)
 
-with one self-attention head
-- val loss ~2.4
+loss: 1.1338
 
-simple multi head attention - 4 heads
- - val loss ~2.27
-
-with feed forward layer after multi head attention 
- - val loss ~2.23
-
-with layer normalization + residual connections (1 block)
- - val loss ~2.21
-
-with 4 blocks (multi-head self attention, norm + add, feed forward)
- - val loss  ~2.22
-
-with applying the norm before the transformation (this is a deviation from the paper but how it is done now)
-- val loss ~2.14
+with reverse (target) representaion e.g a+b=c (4+9=31)
 
 """
