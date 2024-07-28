@@ -6,7 +6,7 @@ from datetime import datetime
 
 # hyperparameters
 batch_size = 64 # number of independent sequences processed in parallel
-block_size =  16 # context size
+block_size =  64 # context size
 max_iters = 5000
 eval_interval = 500
 learning_rate = 1e-3
@@ -20,7 +20,7 @@ n_layer = 4
 
 torch.manual_seed(1337)
 
-chars = ['0','1','2','3','4','5','6','7','8','9','$','+','='] # All the chars needed for addition
+chars = ['0','1','2','3','4','5','6','7','8','9','$','+','=','.', ' ', '[',']',',','h','a','s','n','u','m','b','e','r','s'] # All the chars needed for addition
 vocab_size = len(chars)
 # tokenize chars
 stoi = {x:i for i,x in enumerate(chars)}
@@ -37,11 +37,15 @@ def getPlainFormat(data):
 def getReverseFormat(data):
     return"".join([f'${a}+{b}={str(c)[::-1]}$' for [a, b], c in zip(data.tolist(), data.sum(1).tolist())])
 
+# Data needs 3 numbers
+def getChainOfThoughtData(data):
+    return"".join([f'[{a}, {b}, {c}] has 3 numbers. {a} + {b} = {str(a+b)[::-1]}. {a+b} + {c} = {str(a+b+c)[::-1]}. {a} + {b} + {c} = {str(a+b+c)[::-1]}$' for [a, b, c] in data.tolist()])
+
 #----------------------------------------
 
 # Generate batches on the fly
 def getRandomData(n=1000):
-    data = torch.cat([torch.randint(10, (int(n*0.2), 2)), torch.randint(100, (int(n*0.8), 2))])
+    data = torch.cat([torch.randint(10, (n, 2))])
     return torch.tensor(encode(getReverseFormat(data)), dtype=torch.long)
 
 def getBatch():
@@ -91,19 +95,8 @@ for steps in range(max_iters):
 
 now = datetime.today().strftime('%Y-%m-%d-%H-%M')
 torch.save(model, f'./models/model_add2_{now}.pth')
-print('./models/model_add2_{now}.pth')
+print(f'./models/model_add2_{now}.pth')
 # context = torch.zeros((1,1), dtype=torch.long, device=device)
 context = torch.tensor(encode('2+5='), dtype=torch.long).view(1,-1)
 print(context)
 printSampleFromModel(context, 2)
-
-
-"""
-LOG:
-with default representation e.g a+b=c (4+9=13)
-
-loss: 1.1338
-
-with reverse (target) representaion e.g a+b=c (4+9=31)
-
-"""
